@@ -1,3 +1,9 @@
+from importlib.abc import Loader, MetaPathFinder
+from importlib.machinery import ModuleSpec
+
+import sys
+
+
 def _overload_format(self, format_spec):
     """
     Allows Rust-style attribute access for modules.
@@ -26,3 +32,31 @@ def _overload_format(self, format_spec):
                 result = getattr(result, target.split("(")[0])()
 
     return str(result)
+
+
+sys.path.insert(0, "")
+
+
+class MyFinder(MetaPathFinder):
+    def find_spec(self, name, *args):
+        finder = [*filter(lambda i: "PathFinder" in str(i), sys.meta_path)][0]
+        return ModuleSpec(name, ModuleLoader(name, finder.find_spec(name).origin))
+
+
+class ModuleLoader(Loader):
+    def __init__(self, filename):
+        self.filename = filename
+
+    def create_module(self, spec):
+        return None
+
+    def exec_module(self, module):
+        with open(self.filename) as file:
+            data = file.read()
+
+        module.__format__ = _overload_format
+
+        exec(data, vars(module))
+
+
+loader_details = ModuleLoader, [".py"]
