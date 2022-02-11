@@ -1,7 +1,8 @@
-from importlib.abc import Loader, MetaPathFinder
-from importlib.machinery import ModuleSpec
-
 import sys
+
+from importlib import invalidate_caches
+from importlib.abc import Loader
+from importlib.machinery import FileFinder
 
 
 def _overload_format(self, format_spec):
@@ -34,29 +35,27 @@ def _overload_format(self, format_spec):
     return str(result)
 
 
-sys.path.insert(0, "")
-
-
-class MyFinder(MetaPathFinder):
-    def find_spec(self, name, *args):
-        finder = [*filter(lambda i: "PathFinder" in str(i), sys.meta_path)][0]
-        return ModuleSpec(name, ModuleLoader(name, finder.find_spec(name).origin))
-
-
-class ModuleLoader(Loader):
-    def __init__(self, filename):
-        self.filename = filename
+class AddFormatSpecsLoader(Loader):
+    """Loader to add __format__ on import for not so Pythonic imports."""
+    def __init__(self, *_):
+        pass
 
     def create_module(self, spec):
-        return None
+        self.origin = spec.origin
+        return
 
     def exec_module(self, module):
-        with open(self.filename) as file:
-            data = file.read()
+        with open(self.origin) as file:
+            source = file.read()
 
-        module.__format__ = _overload_format
+        setattr(module, "__format__", _overload_format)
 
-        exec(data, vars(module))
+        exec(source, vars(module))
 
 
-loader_details = ModuleLoader, [".py"]
+loader_details = AddFormatSpecsLoader, [".py"]
+
+# Add path hook in front of others
+sys.path_hooks.insert(0, FileFinder.path_hook(loader_details))
+sys.path_importer_cache.clear()
+invalidate_caches()
